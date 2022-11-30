@@ -374,8 +374,6 @@ a,
                     name="email-form"
                     data-name="Email Form"
                     class="form_popup-component"
-                    action="/.netlify/functions/charge"
-                    method="post"
                   >
                     <div class="form_text-input-wrap">
                       <label for="name" class="form_text-popup">Name *</label
@@ -386,7 +384,7 @@ a,
                         name="name"
                         data-name="Name"
                         placeholder="Enter your Full name"
-                        id="name"
+                        id="name-payment"
                         required
                       />
                     </div>
@@ -399,7 +397,7 @@ a,
                         name="email"
                         data-name="Email"
                         placeholder="Enter your email address"
-                        id="Email"
+                        id="email-payment"
                         required
                       />
                     </div>
@@ -422,10 +420,11 @@ a,
                       />
                     </div>
                   </form>
-                  <div class="w-form-done">
+                  <p id="card-errors" class="paragraph-49" style="color:red;"></p>
+                  <div class="w-form-done-">
                     <div>Thank you! Your submission has been received!</div>
                   </div>
-                  <div class="w-form-fail">
+                  <div class="w-form-fail-">
                     <div>
                       Oops! Something went wrong while submitting the form.
                     </div>
@@ -532,52 +531,80 @@ a,
       });
     </script>
 
-    <script>
-      //strpe payment
+<script>
+  //Stripe Payment
+  document.addEventListener("DOMContentLoaded", async () => {
+    const stripe = Stripe(
+      "pk_test_51Lrnh3Hn5HPNBT2DQtdgvnH7HCOm8qYTOyYDrzrIpJhAHdgeeC5n4i6qLFy2JibSXGNfjT5c419dHbVNyVZxBAY700PxxUxtgz"
+    );
+    var elements = stripe.elements();
 
-      var stripe = Stripe(
-        "pk_test_51Lrnh3Hn5HPNBT2DQtdgvnH7HCOm8qYTOyYDrzrIpJhAHdgeeC5n4i6qLFy2JibSXGNfjT5c419dHbVNyVZxBAY700PxxUxtgz"
-      );
-      var elements = stripe.elements();
-      // Custom styling can be passed to options when creating an Element.
-      var style = {
-        base: {
-          // Add your base input styles here. For example:
-          fontSize: "16px",
-          color: "#32325d",
-        },
+    var style = {
+      base: {
+        fontSize: "16px",
+        color: "#32325d",
+      },
+    };
+
+    var cardElement = elements.create("card", { style: style });
+    cardElement.mount("#card-element");
+
+    var form = document.getElementById("payment-form");
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      var name = document.getElementById("name-payment").value;
+      var email = document.getElementById("email-payment").value;
+
+      const billingDetails = {
+        name: name,
+        email: email,
       };
-      // Create an instance of the card Element.
-      var card = elements.create("card", { style: style });
-      // Add an instance of the card Element into the `card-element` <div>.
-      card.mount("#card-element");
-      // Create a token or display an error when the form is submitted.
-      var form = document.getElementById("payment-form");
-      form.addEventListener("submit", function (event) {
-        event.preventDefault();
-        stripe.createToken(card).then(function (result) {
-          if (result.error) {
-            // Inform the customer that there was an error.
-            var errorElement = document.getElementById("card-errors");
-            errorElement.textContent = result.error.message;
-            errorElement.style.display = "block";
-          } else {
-            // Send the token to your server.
-            stripeTokenHandler(result.token);
-          }
-        });
+      
+      const charge = await stripe.createPaymentMethod({
+        type: "card",
+        card: cardElement,
+        billing_details: billingDetails,
       });
-      function stripeTokenHandler(token) {
-        // Insert the token ID into the form so it gets submitted to the server
-        var form = document.getElementById("payment-form");
-        var hiddenInput = document.createElement("input");
-        hiddenInput.setAttribute("type", "hidden");
-        hiddenInput.setAttribute("name", "stripeToken");
-        hiddenInput.setAttribute("value", token.id);
-        form.appendChild(hiddenInput);
-        // Submit the form
-        form.submit();
+
+      if (charge.error) {
+        var errorElement = document.getElementById("card-errors");
+        errorElement.textContent = charge.error.message;
+        errorElement.style.display = "block";
+        return;
       }
-    </script>
+
+      await axios
+        .post("/.netlify/functions/charge", {})
+        .then(async (response) => {
+          const { error } = await stripe.confirmCardPayment(
+            response.data.clientSecret,
+            {
+              payment_method: charge.paymentMethod.id,
+            }
+          );
+
+          if (error) {
+            //console.log("Failed: " + error)
+            var errorElement = document.getElementById("card-errors");
+            errorElement.textContent = "Failed: " + error;
+            errorElement.style.display = "block";
+            return;
+          } else {
+            var errorElement = document.getElementById("card-errors");
+            window.location.replace("/thank-you");
+            errorElement.textContent = "SUCCESS";
+            errorElement.style.display = "block";
+          }
+        })
+        .catch((err) => {
+          var errorElement = document.getElementById("card-errors");
+          errorElement.textContent = "Failed: " + err;
+          errorElement.style.display = "block";
+          //console.log("Failed: " + err)
+        });
+    });
+  });
+</script>
   </body>
 </html>
